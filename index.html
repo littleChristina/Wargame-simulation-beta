@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>兵棋《渡口》beta</title>
+<style>
+  body { background:#1d1c1a; color:#ddd; font-family:"Microsoft YaHei",sans-serif; margin:0; }
+  #layout { display:flex; gap:12px; padding:12px; }
+  #left { flex:0 0 auto; }
+  #panel { flex:1 1 320px; max-width:400px; display:flex; flex-direction:column; gap:8px; }
+  canvas { border:1px solid #555; max-width:100%; cursor:pointer; }
+  .card, #status, .pending { background:#2a2925; border:1px solid #4a4844; border-radius:6px; padding:8px 10px; font-size:13px; }
+  button { background:#3f6fb5; color:#fff; border:none; border-radius:4px; padding:5px 12px; margin:2px 4px 2px 0; cursor:pointer; font-size:13px; }
+  button:hover { filter:brightness(1.15); }
+  button.ghost { background:#55534e; }
+  button:disabled { opacity:.45; cursor:not-allowed; }
+  .chip { display:inline-block; background:#3a3934; border:1px solid #5a5852; border-radius:12px; padding:2px 8px; margin:2px 4px 2px 0; font-size:12px; cursor:pointer; }
+  .chip.on { background:#3f6fb5; border-color:#6f9fd8; }
+  .dim { color:#8a887f; font-size:12px; }
+  .warn { color:#e8b040; }
+  .over { color:#7fd87f; font-size:16px; }
+  #pending { min-height:20px; }
+  #stackbar { background:#2a2925; border:1px solid #4a4844; border-radius:6px; padding:8px 10px; font-size:13px; }
+  #log { background:#232220; border:1px solid #4a4844; border-radius:6px; padding:6px 10px; font-size:12px; height:230px; overflow-y:auto; }
+  #flash { color:#ff9c6a; min-height:18px; font-size:13px; }
+  h1 { font-size:18px; margin:4px 0; }
+</style>
+</head>
+<body>
+<div id="layout">
+  <div id="left">
+    <h1>兵棋《渡口》beta — 12回合渡河攻坚（热座）</h1>
+    <canvas id="map"></canvas>
+    <div id="flash"></div>
+    <div id="stackbar"></div>
+    <div id="pending"></div>
+  </div>
+  <div id="panel">
+    <div id="status"></div>
+    <div id="actions"></div>
+    <div id="info"></div>
+    <div id="log"></div>
+    <div class="card dim">
+      图例：紫虚线框=敌强ZOC　白罩=可停留格　绿罩=撤退可走格　橙罩=炮击射程　红虚线框=目标点<br>
+      单位角标：橙圆"压"=被压制　红"!"=未补给　浅色底=受损面<br>
+      操作：移动阶段点单位→点白罩格移动；战斗阶段点敌格开战、点炮兵进入炮击模式。
+    </div>
+  </div>
+</div>
+<script type="module" src="src/main.js"></script>
+</body>
+</html>

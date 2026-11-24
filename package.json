@@ -1,0 +1,10 @@
+{
+  "name": "wargame-duko",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "网页兵棋《渡口》：六角格+步进制+2d6 CRT+双层ZOC+补给+堆叠，二战渡河攻坚（热座）",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test/engine.test.js"
+  }
+}
