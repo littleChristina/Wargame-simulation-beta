@@ -361,3 +361,7 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+/start-public.bat
+
+# Local public deployment (real Cloudflare hostname / tunnel name; never commit)
+public.local.json

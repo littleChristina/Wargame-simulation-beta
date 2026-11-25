@@ -21,15 +21,27 @@
   .over { color:#7fd87f; font-size:16px; }
   #pending { min-height:20px; }
   #stackbar { background:#2a2925; border:1px solid #4a4844; border-radius:6px; padding:8px 10px; font-size:13px; }
+  #setup { position:fixed; inset:0; background:#1d1c1a; z-index:10; padding:16px 24px; overflow:auto; }
+  .setup-card { background:#2a2925; border:1px solid #4a4844; border-radius:8px; padding:14px 18px; max-width:760px; }
+  .setup-card p { margin:6px 0; }
+  .setup-card input { background:#1d1c1a; color:#eee; border:1px solid #5a5852; border-radius:4px; padding:4px 6px; }
+  .lan-code { color:#7fd87f; letter-spacing:2px; font-family:Consolas,monospace; }
+  #lan-link { width:380px; max-width:100%; }
+  .row { margin:10px 0; }
+  .lbl { display:inline-block; width:90px; color:#9a988f; }
+  .alloctable { border-collapse:collapse; font-size:13px; margin:6px 0; }
+  .alloctable th, .alloctable td { border:1px solid #4a4844; padding:3px 10px; text-align:left; }
+  button.primary { background:#2f8f4f; font-size:16px; padding:8px 34px; }
   #log { background:#232220; border:1px solid #4a4844; border-radius:6px; padding:6px 10px; font-size:12px; height:230px; overflow-y:auto; }
   #flash { color:#ff9c6a; min-height:18px; font-size:13px; }
   h1 { font-size:18px; margin:4px 0; }
 </style>
 </head>
 <body>
-<div id="layout">
+<div id="setup"></div>
+<div id="layout" style="display:none">
   <div id="left">
-    <h1>兵棋《渡口》beta — 12回合渡河攻坚（热座）</h1>
+    <h1>兵棋《渡口》beta — 12回合渡河攻坚（热座 / PVE / 局域网联机）</h1>
     <canvas id="map"></canvas>
     <div id="flash"></div>
     <div id="stackbar"></div>
@@ -43,10 +55,13 @@
     <div class="card dim">
       图例：紫虚线框=敌强ZOC　白罩=可停留格　绿罩=撤退可走格　橙罩=炮击射程　红虚线框=目标点<br>
       单位角标：橙圆"压"=被压制　红"!"=未补给　浅色底=受损面<br>
-      操作：移动阶段点单位→点白罩格移动；战斗阶段点敌格开战、点炮兵进入炮击模式。
+      操作：移动阶段点单位→点白罩格移动；战斗阶段点敌格开战、点炮兵进入炮击模式。<br>
+      堆叠格：移入同一格后用下方选择栏切换单位；多单位撤退先在结算面板点选撤退单位。<br>
+      AI 结算期间面板只读，人类只处理属于自己的应手（如攻方挺进）。<br>
+      联机：非我方回合/非我方应手时只读；顶部状态栏会显示房间号与"等待对方"。
     </div>
   </div>
 </div>
-<script type="module" src="src/main.js"></script>
+<script type="module" src="src/main.js?v=20261125-lan"></script>
 </body>
 </html>

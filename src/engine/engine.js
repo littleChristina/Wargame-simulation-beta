@@ -2,6 +2,7 @@
 import { hexKey, findUnit, unitLabel, sideName } from './state.js';
 import { doMove } from './move.js';
 import { markSupply } from './supply.js';
+import { applySetup } from './setup.js';
 import { checkAnnihilation, evaluateScenarioEnd } from './victory.js';
 
 function pairKey(a, b) {
@@ -9,7 +10,7 @@ function pairKey(a, b) {
   return `${x[0]},${x[1]}|${y[0]},${y[1]}`;
 }
 
-export function createGame(scenario, seed) {
+export function createGame(scenario, seed, setup) {
   const state = {
     width: scenario.width,
     height: scenario.height,
@@ -53,6 +54,7 @@ export function createGame(scenario, seed) {
     };
   });
   state.log.push(`战役开始（种子 ${seed}）：${scenario.name}`);
+  if (setup) applySetup(state, setup);
   runPhaseStart(state);
   return state;
 }

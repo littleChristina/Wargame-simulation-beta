@@ -5,6 +5,6 @@
   "description": "网页兵棋《渡口》：六角格+步进制+2d6 CRT+双层ZOC+补给+堆叠，二战渡河攻坚（热座）",
   "scripts": {
     "start": "node server.js",
-    "test": "node test/engine.test.js"
+    "test": "node test/engine.test.js && node test/ui.test.js && node test/net.test.js && node test/lobby.test.js"
   }
 }

@@ -251,4 +251,22 @@ function drawUnit(ctx, u, shift = 0) {
     ctx.fillStyle = '#fff'; ctx.font = 'bold 8px sans-serif'; ctx.textAlign = 'center';
     ctx.fillText('!', c.x - w / 2 + 3, c.y - h / 2 + 4);
   }
+  // 指挥官徽标（P1/P2，AI 无徽标）
+  if (u.commander === 'P1' || u.commander === 'P2') {
+    ctx.fillStyle = '#f5f0e0';
+    ctx.strokeStyle = col.border;
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(c.x + w / 2 - 1, c.y + h / 2 - 1, 5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#222'; ctx.font = 'bold 7px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText(u.commander === 'P1' ? '1' : '2', c.x + w / 2 - 1, c.y + h / 2 + 2);
+  }
+  // 已移动/已攻击 角标（左下小点）
+  if (u.moved) {
+    ctx.fillStyle = '#8a8a8a';
+    ctx.beginPath(); ctx.arc(c.x - w / 2 + 4, c.y + h / 2 - 3, 3, 0, Math.PI * 2); ctx.fill();
+  }
+  if (u.attacked) {
+    ctx.fillStyle = '#8a2020';
+    ctx.beginPath(); ctx.arc(c.x - w / 2 + 9, c.y + h / 2 - 3, 3, 0, Math.PI * 2); ctx.fill();
+  }
 }

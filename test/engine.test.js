@@ -1,16 +1,18 @@
 // 自测套件：node test/engine.test.js（零依赖，直接运行）
 import assert from 'node:assert/strict';
 import { ROWS, rowForRatio, RESULT_INFO } from '../src/engine/crt.js';
-import { UNIT_STATS, MAX_STACK, hexKey } from '../src/engine/state.js';
+import { UNIT_STATS, MAX_STACK, hexKey, canStopIn, unitsAt } from '../src/engine/state.js';
 import { TERRAIN } from '../src/engine/terrain.js';
 import { scenario } from '../src/data/scenario.js';
-import { createGame, endPhase } from '../src/engine/engine.js';
+import { createGame, endPhase, moveUnit } from '../src/engine/engine.js';
 import { computeReachable, stepCost } from '../src/engine/move.js';
 import { computeSupplySet } from '../src/engine/supply.js';
 import { strongZoc } from '../src/engine/zoc.js';
 import { declareAttack, assignStep, commitAssign, beginRetreat, retreatStep,
          retreatStepOptions, currentRetreatUnitId, toggleAdvance, commitAdvance, skipAdvance } from '../src/engine/combat.js';
 import { roll2d6 } from '../src/engine/rng.js';
+import { MODE, evenSplitByPoints, isAiSide } from '../src/engine/setup.js';
+import { runAiTurn, aiStep, shouldAiDrive, pendingOwnerSide } from '../src/ai/ai-player.js';
 
 let pass = 0, fail = 0;
 function test(name, fn) {
@@ -24,10 +26,10 @@ const place = (st, id, col, row) => { const u = byId(st, id); u.col = col; u.row
 const throws = f => { try { f(); return false; } catch { return true; } };
 const maxSteps = u => (u.face === 'full' && UNIT_STATS[u.type].hasReduced ? 2 : 1);
 
-// 在 1..tries 的种子里找第一个掷出指定结果的局面
-function findSeed(run, result, tries = 400) {
+// 在 1..tries 的种子里找第一个掷出指定结果的局面（setup 可选，用于挂 AI 阵营）
+function findSeed(run, result, tries = 400, setup = undefined) {
   for (let s = 1; s <= tries; s++) {
-    const st = createGame(scenario, s);
+    const st = createGame(scenario, s, setup);
     const p = run(st, s);
     if (p.result === result) return st;
   }
@@ -60,6 +62,15 @@ function resolve(st) {
     else throw new Error('bad step ' + p.step);
   }
   assert.ok(!st.pending, '战斗应结算完毕');
+}
+
+// 按 app.js 的驱动策略跑 AI 应手：只要 AI 拥有 pending 或轮到 AI 就继续（同步、无延迟）
+function driveAi(st, max = 100) {
+  let steps = 0;
+  while (shouldAiDrive(st) && steps++ < max) {
+    if (aiStep(st) !== 'continue') break;
+  }
+  return st;
 }
 
 // ---------- CRT ----------
@@ -130,6 +141,28 @@ test('补给与ZOC：前线有补给；同岸两守军成强ZOC且不跨大河',
   const sz = strongZoc(st, 'defender');
   assert.ok(sz.has('10,4'), '同岸两守军成强ZOC');
   assert.ok(!sz.has('10,6'), 'ZOC不跨大河（桥除外）');
+});
+test('堆叠：2点可进、3点封顶、满格可达但不可停留', () => {
+  const st = createGame(scenario, 1, { mode: MODE.PVP, p1Side: 'attacker' });
+  const keep = ['attacker-infantry-1', 'attacker-infantry-2', 'attacker-infantry-3', 'attacker-infantry-4'];
+  isolate(st, keep);
+  // 步兵4 初始就在 (6,9)；步兵5（编号2）移入同一格：2 点可停
+  assert.equal(byId(st, 'attacker-infantry-4').col, 6);
+  assert.equal(byId(st, 'attacker-infantry-4').row, 9);
+  place(st, 'attacker-infantry-2', 7, 10);
+  moveUnit(st, 'attacker-infantry-2', { col: 6, row: 9 });
+  assert.equal(unitsAt(st, 6, 9).length, 2, '2 点堆叠应成功');
+  // 第三支步兵进入同一格：3 点仍合法
+  place(st, 'attacker-infantry-3', 7, 9);
+  moveUnit(st, 'attacker-infantry-3', { col: 6, row: 9 });
+  assert.equal(unitsAt(st, 6, 9).length, 3, '3 点堆叠应成功');
+  assert.equal(canStopIn(st, 6, 9, 'infantry'), false, '满格不可再停');
+  // 第四支：该格可达（可穿过），但不可停留
+  place(st, 'attacker-infantry-1', 4, 9);
+  const nfo = computeReachable(st, byId(st, 'attacker-infantry-1')).get('6,9');
+  assert.ok(nfo, '满格友军格应可达');
+  assert.equal(nfo.stoppable, false, '满格友军格可穿过不可停留');
+  assert.ok(throws(() => moveUnit(st, 'attacker-infantry-1', { col: 6, row: 9 })), '停车应被拒绝');
 });
 
 // ---------- 战斗与撤退 ----------
@@ -264,5 +297,121 @@ test('挺进：超过堆叠上限的确认被拒绝', () => {
   assert.equal(byId(st, 'attacker-armor-1').col, 7);
   assert.ok(!st.pending);
 });
+// ---------- 开局设置与指挥官 ----------
+test('设置：coop-pve 指挥官分配与AI阵营', () => {
+  const st = createGame(scenario, 1, { mode: MODE.COOP_PVE, p1Side: 'defender', split: {} });
+  assert.ok(st.units.filter(u => u.side === 'defender').every(u => u.commander === 'P1'));
+  assert.ok(st.units.filter(u => u.side === 'attacker').every(u => u.commander === 'AI'));
+  assert.deepEqual(st.meta.aiSides, ['attacker']);
+  assert.ok(isAiSide(st, 'attacker') && !isAiSide(st, 'defender'));
+});
+test('设置：pvp 指挥官', () => {
+  const st = createGame(scenario, 1, { mode: MODE.PVP, p1Side: 'attacker' });
+  assert.ok(st.units.filter(u => u.side === 'attacker').every(u => u.commander === 'P1'));
+  assert.ok(st.units.filter(u => u.side === 'defender').every(u => u.commander === 'P2'));
+  assert.deepEqual(st.meta.aiSides, []);
+});
+test('设置：均分预设对半且点数平衡', () => {
+  const points = scenario.units.filter(u => u.side === 'defender')
+    .map(u => (u.type === 'armor' ? 2 : (u.type === 'infantry' ? 1 : 0)));
+  const split = evenSplitByPoints(points);
+  const c = { P1: 0, P2: 0 }, pts = { P1: 0, P2: 0 };
+  split.forEach((cmd, i) => { c[cmd]++; pts[cmd] += points[i]; });
+  assert.equal(c.P1, 6, '人数对半');
+  assert.equal(c.P2, 6, '人数对半');
+  assert.equal(pts.P1, 6, '点数对半');
+  assert.equal(pts.P2, 6, '点数对半');
+});
+
+// ---------- AI 应手（人类回合内） ----------
+const PVE_HUMAN_ATTACK = { mode: MODE.SOLO_PVE, p1Side: 'attacker' }; // 人类攻方，AI 守方
+
+// 人类攻方攻击 AI 守军（守军堆在 7,4），取指定 CRT 结果
+function humanAttacksAiDefender(result, defenders = 1) {
+  return findSeed(st => {
+    const keep = ['attacker-infantry-1', 'attacker-infantry-2'];
+    for (let i = 1; i <= defenders; i++) keep.push('defender-infantry-' + i);
+    isolate(st, keep);
+    for (let i = 1; i <= defenders; i++) place(st, 'defender-infantry-' + i, 7, 4);
+    place(st, 'attacker-infantry-1', 8, 4);
+    place(st, 'attacker-infantry-2', 7, 3);
+    st.phase = 'combat';
+    return declareAttack(st, ['attacker-infantry-1', 'attacker-infantry-2'], { col: 7, row: 4 });
+  }, result, 500, PVE_HUMAN_ATTACK);
+}
+
+test('应手策略：人类回合内 AI 归属的待结算会驱动 AI，人类归属的不驱动', () => {
+  const aiOwned = humanAttacksAiDefender('DR');
+  assert.equal(aiOwned.activeSide, 'attacker', '应仍处于人类回合');
+  assert.equal(pendingOwnerSide(aiOwned, aiOwned.pending), 'defender', '应手属于 AI 守方');
+  assert.equal(shouldAiDrive(aiOwned), true, 'AI 守方应手应被驱动');
+  const humanOwned = humanAttacksAiDefender('A1');
+  assert.equal(humanOwned.pending.step, 'assign');
+  assert.equal(pendingOwnerSide(humanOwned, humanOwned.pending), 'attacker');
+  assert.equal(shouldAiDrive(humanOwned), false, '人类攻方的损失不由 AI 代打');
+  const pvp = findSeed(st => {
+    isolate(st, ['attacker-infantry-1', 'attacker-infantry-2', 'defender-infantry-1']);
+    place(st, 'defender-infantry-1', 7, 4);
+    place(st, 'attacker-infantry-1', 8, 4);
+    place(st, 'attacker-infantry-2', 7, 3);
+    st.phase = 'combat';
+    return declareAttack(st, ['attacker-infantry-1', 'attacker-infantry-2'], { col: 7, row: 4 });
+  }, 'DR', 500, { mode: MODE.PVP, p1Side: 'attacker' });
+  assert.equal(shouldAiDrive(pvp), false, '热座 PvP 没有 AI');
+});
+test('应手：人类攻击 AI 守军，AI 自动分配步损并撤退，只剩人类挺进', () => {
+  const st = humanAttacksAiDefender('DR', 2);
+  driveAi(st);
+  assert.ok(!st.pending || pendingOwnerSide(st, st.pending) === 'attacker', 'AI 守方不再欠应手');
+  assert.ok(st.pending && st.pending.step === 'advance', '撤退后由人类攻方选择挺进');
+  for (const id of ['defender-infantry-1', 'defender-infantry-2']) {
+    const u = byId(st, id);
+    assert.ok(u && !u.dead, id + ' 应存活');
+    assert.ok(!(u.col === 7 && u.row === 4), id + ' 应已撤离原格');
+  }
+  assert.ok(st.log.some(l => l.includes('【撤退】')), '应产生撤退记录');
+});
+test('应手：人类攻击产生攻方损失时 AI 不代打', () => {
+  const st = humanAttacksAiDefender('A1');
+  assert.equal(st.pending.step, 'assign');
+  assert.equal(st.pending.needAttackerSteps, 1);
+  assert.equal(pendingOwnerSide(st, st.pending), 'attacker');
+  assert.equal(shouldAiDrive(st), false);
+  const sig = s => JSON.stringify(s.units.map(u => [u.id, u.col, u.row, u.face, u.dead]));
+  const before = sig(st);
+  driveAi(st);
+  assert.equal(sig(st), before, 'AI 不应改动人类归属的应手');
+  assert.ok(st.pending && st.pending.step === 'assign');
+});
+
+// ---------- AI 冒烟 ----------
+function playGameWithAi(aiSide, seed) {
+  const st = createGame(scenario, seed, {
+    mode: MODE.SOLO_PVE, p1Side: aiSide === 'attacker' ? 'defender' : 'attacker',
+  });
+  let guard = 0;
+  while (!st.over && guard++ < 100) {
+    if (st.pending) resolve(st);                                  // 谁的应手都由测试方代答
+    else if (isAiSide(st, st.activeSide)) runAiTurn(st);
+    else endPhase(st);
+  }
+  return { st, guard };
+}
+test('AI冒烟：AI执攻方完整对局', () => {
+  const { st } = playGameWithAi('attacker', 42);
+  assert.ok(st.over, '对局应在12回合内结束');
+  assert.ok(st.log.length > 40, 'AI应产生大量动作记录: ' + st.log.length);
+});
+test('AI冒烟：AI执守方完整对局', () => {
+  const { st } = playGameWithAi('defender', 42);
+  assert.ok(st.over, '对局应在12回合内结束');
+});
+test('AI确定性：同种子同终局同布局', () => {
+  const sig = s => JSON.stringify(s.units.map(u => [u.id, u.col, u.row, u.face, u.dead])) + '|' + s.over;
+  const a = playGameWithAi('attacker', 7).st;
+  const b = playGameWithAi('attacker', 7).st;
+  assert.equal(sig(a), sig(b));
+});
+
 console.log(fail === 0 ? 'ALL PASS (' + pass + ')' : fail + ' FAILED, ' + pass + ' passed');
 process.exit(fail === 0 ? 0 : 1);
